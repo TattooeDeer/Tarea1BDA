@@ -1,6 +1,6 @@
 ---
 title: "Críticas de Apps en Google Play Store"
-output: html_notebook
+output: pdf_document
 author:
 - Ignacio Loayza.
 - Miguel Huichaman.
@@ -56,37 +56,21 @@ Ahora, se estudiarán los términos que más se repiten en las reviews de las ap
 
 Primero almacenaremos los textos de todas las reviews en formato .txt, separadas inmediatamente por sentimiento, para poder conformar de manera formal el corpus:
 ```{r}
-knitr::opts_knit$set(root.dir = normalizePath("."))
-
-mainDir <- getwd()
-subDir <- "texts"
-
-dir.create(file.path(mainDir, subDir), showWarnings = FALSE)
-setwd(file.path(mainDir))
-
-curr_wd = getwd()
 
 positive <- categories_mongo$find('{}','{"cumulated_reviews.positives":1, "_id":0}')
 negative <- categories_mongo$find('{}','{"cumulated_reviews.negatives":1, "_id":0}')
 neutral <- categories_mongo$find('{}','{"cumulated_reviews.neutrals":1, "_id":0}')
 
-fileConn_neg <-file(sprintf("%s/texts/negatives.txt", curr_wd))
-fileConn_pos <-file(sprintf("%s/texts/positives.txt", curr_wd))
-fileConn_neu <-file(sprintf("%s/texts/neutrals.txt", curr_wd))
+#all reviews
+rev_all <- c(positive[,1],negative[,1],neutral[,1])
+vector_reviews <- VectorSource(rev_all)
 
-save(positive, file = fileConn_pos)
-save(negative, file = fileConn_neg)
-save(neutral, file = fileConn_neu)
-
-close(fileConn_pos)
-close(fileConn_neg)
-close(fileConn_neu)
 ```
 ### 1.1) Términos más repetitivos en todas las apps registradas
 Cargamos el corpus leyendo los textos de todas las reviews.
 
 ```{r}
-docs<- Corpus(DirSource(file.path(mainDir, subDir)))
+docs <- VCorpus(mSource)
 
 # Transformador de espacios
 toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
@@ -131,7 +115,7 @@ docs <- tm_map(docs, content_transformer(gsub), pattern = "team-", replacement =
 #writeLines(as.character(docs[[1]]))
 
 # Matriz de documentos - términos (MDT)
-dtm <- DocumentTermMatrix(docs)
+dtm <- DocumentTermMatrix(docs, control=list(wordLengths=c(4, 20)))
 # Matriz de 30 x 4200, en la cual un 89% de filas son cero
 dtm
 ```
@@ -152,4 +136,77 @@ plot(freq[ord], main = "Frecuencia de términos en los documentos", ylab="Frecue
 ```
 
 Se puede observar la frecuencia de términos en el documento, la cual como es de esperarse, se manifiesta de acuerdo a la Ley de Zipf: Algunos pocos términos son exponencialmente más frecuentes que los demás del documento.
+
+
+### 4) Términos más repetitivos 3 categorías diferentes
+
+Cargamos el corpus leyendo los textos de todas las reviews de las categorías ART_AND_DESIGN, EDUCATION, FINANCE.
+
+```{r}
+positives <- categories_mongo$find('{"category": { "$in": ["SOCIAL", "SHOPPING", "SPORTS" ]}}','{"cumulated_reviews.positives":1, "_id":0}')
+negatives <- categories_mongo$find('{"category": { "$in": ["SOCIAL", "SHOPPING", "SPORTS" ]}}','{"cumulated_reviews.negatives":1, "_id":0}')
+neutrals <- categories_mongo$find('{"category": { "$in": ["SOCIAL", "SHOPPING", "SPORTS" ]}}','{"cumulated_reviews.neutrals":1, "_id":0}')
+
+rev_3 <- c(positives[,1],negatives[,1],neutrals[,1])
+vector_3_reviews <- VectorSource(rev_3)
+```
+### 4.1) Términos más repetitivos en todas las apps registradas
+Cargamos el corpus leyendo los textos de todas las reviews de estas categorías.
+```{r}
+
+docs <- VCorpus(vector_3_reviews)
+
+# Transformador de espacios
+toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
+
+# Limpieza de puntuacion
+# Usar el transformador anterior para eliminar comas, dos puntos y otros...
+docs <- tm_map(docs, toSpace, "-")
+docs <- tm_map(docs, toSpace, ":")
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, toSpace, "’")
+docs <- tm_map(docs, toSpace, "‘")
+docs <- tm_map(docs, toSpace, " -")
+
+# There are some parasite words that need cleaning
+docs <- tm_map(docs, toSpace, "data frame")
+docs <- tm_map(docs, toSpace, "Translated_Review")
+docs <- tm_map(docs, toSpace, "datafram")
+
+# Transformar todo a minusculas
+docs <- tm_map(docs,content_transformer(tolower))
+
+# Eliminar digitos
+docs <- tm_map(docs, removeNumbers)
+
+# Remover stopwords usando la lista estándar de tm
+docs <- tm_map(docs, removeWords, stopwords("english"))
+
+# Borrar todos los espacios en blanco extraños
+docs <- tm_map(docs, stripWhitespace)
+
+# Stemming
+docs <- tm_map(docs,stemDocument)
+#writeLines(as.character(docs[[1]]))
+
+# Lemmatization (toma en cuenta el contexto) ... podrían hacerse varias más
+docs <- tm_map(docs, content_transformer(gsub), pattern = "organiz", replacement = "organ")
+docs <- tm_map(docs, content_transformer(gsub), pattern = "organis", replacement = "organ")
+docs <- tm_map(docs, content_transformer(gsub), pattern = "andgovern", replacement = "govern")
+docs <- tm_map(docs, content_transformer(gsub), pattern = "inenterpris", replacement = "enterpris")
+docs <- tm_map(docs, content_transformer(gsub), pattern = "team-", replacement = "team")
+
+#writeLines(as.character(docs[[1]]))
+
+# Matriz de documentos - términos (MDT)
+dtm <- DocumentTermMatrix(docs, control=list(wordLengths=c(4, 20)))
+# Matriz de 30 x 4200, en la cual un 89% de filas son cero
+dtm
+```
+```{r}
+freq <- colSums(as.matrix(dtm))
+ord <- order(freq,decreasing=TRUE)
+print("Términos más frecuentes: ")
+print(freq[head(ord)])
+```
 
