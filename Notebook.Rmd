@@ -1,0 +1,155 @@
+---
+title: "Críticas de Apps en Google Play Store"
+output: html_notebook
+author:
+- Ignacio Loayza.
+- Miguel Huichaman.
+- Jorge Caullán.
+date: 15/04/2019
+---
+
+En esta ocasión se estudiaran las críticas a varias aplicaciones de la Google Play Store.
+El código para importar los datos a la base de datos, asi como también el esquema de jerarquía con el que se modelaron los datos puede ser encontrado en el repositorio del proyecto.
+
+```{r}
+# Paquetes requeridos
+list.of.packages <- c("SnowballC", "tm", "mongolite")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+
+categories_mongo <- mongo(collection = "categories", db = "tarea1BDA", url = 'mongodb://127.0.0.1:27017')
+categories <- categories_mongo$find('{}','{"category":1, "_id":0}') # Con esto tendremos una lista con todas las categorias que hay
+```
+
+## 1.- ¿Qué categorias tienen mayor ranking promedio?
+Nos interesa conocer el puntaje promedio de cada categoría y ordernarlas para encontrars aquellas que poseen mayor puntaje promedio.
+
+
+```{r}
+df_ratings <- data.frame(categ = as.character(character()), mean_rating = as.character(character()), stringsAsFactors = FALSE)
+
+for (cat in categories$category){
+  category_name <- cat
+  query_cat <- sprintf('{"category":"%s"}',category_name)
+  cat_ratings <- categories_mongo$find(query_cat,'{"apps.Rating":1, "_id":0}')
+  category_mean_rating <- mean(as.numeric(as.character(unlist(cat_ratings[[1]]))))
+  #temp_list <- list(categ=as.character(category_name), mean_rating=category_mean_rating)
+  temp_df <- data.frame(categ = as.character(category_name), mean_rating=category_mean_rating, stringsAsFactors = FALSE)
+  df_ratings <- rbind(df_ratings,temp_df)
+}
+
+newdata <- df_ratings[order(df_ratings$mean_rating, decreasing = TRUE),]
+barplot(newdata[,2], names.arg = newdata[,1])  # Barplot horrible
+print(newdata[0:3,])
+```
+
+Las categorías de apps con mayor puntaje promedio son _"Eventos"_, _"Educación"_ y _"Arte y diseño"_, hay que notar, sin embargo, que la media del puntaje de las categorias es $4.202$ y con una desviación estándar de $0.106$ y una media mínima de $3.971$, lo que hace poco distinguibles las categorías en cuanto a puntaje, además de que en general todas las categorías tienen un puntaje medio cercano al máximo.
+```{r}
+summary(newdata$mean_rating)
+sd(newdata$mean_rating)
+```
+
+
+## 2.- Términos descriptivos a los que más se hace alusión
+Ahora, se estudiarán los términos que más se repiten en las reviews de las apps, sin embargo, en este análisis se estudiará esta dimensión en dos casos interesantes: Primero, se estudiará la repetición de términos considerando todas las reviews disponibles y luego, se analizarán los términos más repetitivos por sentimiento, de esta forma se espera encontrar aquellos términos que representan de mejor manera los reviews positivos, negativos y neutrales.
+
+Primero almacenaremos los textos de todas las reviews en formato .txt, separadas inmediatamente por sentimiento, para poder conformar de manera formal el corpus:
+```{r}
+knitr::opts_knit$set(root.dir = normalizePath("."))
+
+mainDir <- getwd()
+subDir <- "texts"
+
+dir.create(file.path(mainDir, subDir), showWarnings = FALSE)
+setwd(file.path(mainDir))
+
+curr_wd = getwd()
+
+positive <- categories_mongo$find('{}','{"cumulated_reviews.positives":1, "_id":0}')
+negative <- categories_mongo$find('{}','{"cumulated_reviews.negatives":1, "_id":0}')
+neutral <- categories_mongo$find('{}','{"cumulated_reviews.neutrals":1, "_id":0}')
+
+fileConn_neg <-file(sprintf("%s/texts/negatives.txt", curr_wd))
+fileConn_pos <-file(sprintf("%s/texts/positives.txt", curr_wd))
+fileConn_neu <-file(sprintf("%s/texts/neutrals.txt", curr_wd))
+
+save(positive, file = fileConn_pos)
+save(negative, file = fileConn_neg)
+save(neutral, file = fileConn_neu)
+
+close(fileConn_pos)
+close(fileConn_neg)
+close(fileConn_neu)
+```
+### 1.1) Términos más repetitivos en todas las apps registradas
+Cargamos el corpus leyendo los textos de todas las reviews.
+
+```{r}
+docs<- Corpus(DirSource(file.path(mainDir, subDir)))
+
+# Transformador de espacios
+toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
+
+# Limpieza de puntuacion
+# Usar el transformador anterior para eliminar comas, dos puntos y otros...
+docs <- tm_map(docs, toSpace, "-")
+docs <- tm_map(docs, toSpace, ":")
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, toSpace, "’")
+docs <- tm_map(docs, toSpace, "‘")
+docs <- tm_map(docs, toSpace, " -")
+
+# There are some parasite words that need cleaning
+docs <- tm_map(docs, toSpace, "data frame")
+docs <- tm_map(docs, toSpace, "Translated_Review")
+docs <- tm_map(docs, toSpace, "datafram")
+
+# Transformar todo a minusculas
+docs <- tm_map(docs,content_transformer(tolower))
+
+# Eliminar digitos
+docs <- tm_map(docs, removeNumbers)
+
+# Remover stopwords usando la lista estándar de tm
+docs <- tm_map(docs, removeWords, stopwords("english"))
+
+# Borrar todos los espacios en blanco extraños
+docs <- tm_map(docs, stripWhitespace)
+
+# Stemming
+docs <- tm_map(docs,stemDocument)
+#writeLines(as.character(docs[[1]]))
+
+# Lemmatization (toma en cuenta el contexto) ... podrían hacerse varias más
+docs <- tm_map(docs, content_transformer(gsub), pattern = "organiz", replacement = "organ")
+docs <- tm_map(docs, content_transformer(gsub), pattern = "organis", replacement = "organ")
+docs <- tm_map(docs, content_transformer(gsub), pattern = "andgovern", replacement = "govern")
+docs <- tm_map(docs, content_transformer(gsub), pattern = "inenterpris", replacement = "enterpris")
+docs <- tm_map(docs, content_transformer(gsub), pattern = "team-", replacement = "team")
+
+#writeLines(as.character(docs[[1]]))
+
+# Matriz de documentos - términos (MDT)
+dtm <- DocumentTermMatrix(docs)
+# Matriz de 30 x 4200, en la cual un 89% de filas son cero
+dtm
+```
+```{r}
+freq <- colSums(as.matrix(dtm))
+ord <- order(freq,decreasing=TRUE)
+print("Términos más frecuentes: ")
+print(freq[head(ord)])
+```
+Se puede observar que los términos más frecuentes en todas las reviews suelen ser positivos, esto puede explicar los altos puntajes que tienen las medias de los puntajes de todas las categorías.
+
+También se puede notar que de los seis términos mostrados, los cuatro que se relacionan con un sentiemiento positivo son palabras que expresan este sentiemiento de forma marcada, siendo de hecho _"love"_ y _"great"_ los segundo y terceros términos que más se repiten.
+
+El hecho de que la palabra _"game"_ sea la que más se repite no aporta mayor información pues el contexto esta implícito.
+
+```{r}
+plot(freq[ord], main = "Frecuencia de términos en los documentos", ylab="Frecuencia de aparición")
+```
+
+Se puede observar la frecuencia de términos en el documento, la cual como es de esperarse, se manifiesta de acuerdo a la Ley de Zipf: Algunos pocos términos son exponencialmente más frecuentes que los demás del documento.
+
