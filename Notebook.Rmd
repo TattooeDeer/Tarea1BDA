@@ -13,10 +13,23 @@ El código para importar los datos a la base de datos, asi como también el esqu
 
 ```{r}
 # Paquetes requeridos
-list.of.packages <- c("SnowballC", "tm", "mongolite")
+list.of.packages <- c("SnowballC", "tm", "mongolite", "wordcloud", "RColorBrewer", "fpc")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
+library("SnowballC")
+library("NLP")
+library("tm")
+library("mongolite")
+library("wordcloud")
+library("RColorBrewer")
+library("fpc")
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install()
+BiocManager::install("graph", version = "3.8")
+BiocManager::install("Rgraphviz", version = "3.8")
 
 categories_mongo <- mongo(collection = "categories", db = "tarea1BDA", url = 'mongodb://127.0.0.1:27017')
 categories <- categories_mongo$find('{}','{"category":1, "_id":0}') # Con esto tendremos una lista con todas las categorias que hay
@@ -70,7 +83,7 @@ vector_reviews <- VectorSource(rev_all)
 Cargamos el corpus leyendo los textos de todas las reviews.
 
 ```{r}
-docs <- VCorpus(mSource)
+docs <- VCorpus(vector_reviews)
 
 # Transformador de espacios
 toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
@@ -138,75 +151,209 @@ plot(freq[ord], main = "Frecuencia de términos en los documentos", ylab="Frecue
 Se puede observar la frecuencia de términos en el documento, la cual como es de esperarse, se manifiesta de acuerdo a la Ley de Zipf: Algunos pocos términos son exponencialmente más frecuentes que los demás del documento.
 
 
+### 3) Relaciones entre términos descriptivos
+
+A continuación se presenta el gráfico de relación entre términos presented en los documentos.
+```{r}
+freq.terms <- findFreqTerms(dtm,lowfreq=4500)
+plot(dtm, term = freq.terms, corThreshold = 0.12, weighting = T)
+```
+
+
+
 ### 4) Términos más repetitivos 3 categorías diferentes
 
 Cargamos el corpus leyendo los textos de todas las reviews de las categorías ART_AND_DESIGN, EDUCATION, FINANCE.
 
 ```{r}
-positives <- categories_mongo$find('{"category": { "$in": ["SOCIAL", "SHOPPING", "SPORTS" ]}}','{"cumulated_reviews.positives":1, "_id":0}')
-negatives <- categories_mongo$find('{"category": { "$in": ["SOCIAL", "SHOPPING", "SPORTS" ]}}','{"cumulated_reviews.negatives":1, "_id":0}')
-neutrals <- categories_mongo$find('{"category": { "$in": ["SOCIAL", "SHOPPING", "SPORTS" ]}}','{"cumulated_reviews.neutrals":1, "_id":0}')
+positives <- categories_mongo$find('{"category": { "$in": ["ART_AND_DESIGN", "EDUCATION", "FINANCE" ]}}','{"cumulated_reviews.positives":1, "_id":0}')
+negatives <- categories_mongo$find('{"category": { "$in": ["ART_AND_DESIGN", "EDUCATION", "FINANCE" ]}}','{"cumulated_reviews.negatives":1, "_id":0}')
+neutrals <- categories_mongo$find('{"category": { "$in": ["ART_AND_DESIGN", "EDUCATION", "FINANCE" ]}}','{"cumulated_reviews.neutrals":1, "_id":0}')
 
 rev_3 <- c(positives[,1],negatives[,1],neutrals[,1])
 vector_3_reviews <- VectorSource(rev_3)
 ```
-### 4.1) Términos más repetitivos en todas las apps registradas
 Cargamos el corpus leyendo los textos de todas las reviews de estas categorías.
 ```{r}
 
-docs <- VCorpus(vector_3_reviews)
+docs3 <- VCorpus(vector_3_reviews)
 
 # Transformador de espacios
 toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
 
 # Limpieza de puntuacion
 # Usar el transformador anterior para eliminar comas, dos puntos y otros...
-docs <- tm_map(docs, toSpace, "-")
-docs <- tm_map(docs, toSpace, ":")
-docs <- tm_map(docs, removePunctuation)
-docs <- tm_map(docs, toSpace, "’")
-docs <- tm_map(docs, toSpace, "‘")
-docs <- tm_map(docs, toSpace, " -")
+docs3 <- tm_map(docs3, toSpace, "-")
+docs3 <- tm_map(docs3, toSpace, ":")
+docs3 <- tm_map(docs3, removePunctuation)
+docs3 <- tm_map(docs3, toSpace, "’")
+docs3 <- tm_map(docs3, toSpace, "‘")
+docs3 <- tm_map(docs3, toSpace, " -")
 
 # There are some parasite words that need cleaning
-docs <- tm_map(docs, toSpace, "data frame")
-docs <- tm_map(docs, toSpace, "Translated_Review")
-docs <- tm_map(docs, toSpace, "datafram")
+docs3 <- tm_map(docs3, toSpace, "data frame")
+docs3 <- tm_map(docs3, toSpace, "Translated_Review")
+docs3 <- tm_map(docs3, toSpace, "datafram")
 
 # Transformar todo a minusculas
-docs <- tm_map(docs,content_transformer(tolower))
+docs3 <- tm_map(docs3,content_transformer(tolower))
 
 # Eliminar digitos
-docs <- tm_map(docs, removeNumbers)
+docs3 <- tm_map(docs3, removeNumbers)
 
 # Remover stopwords usando la lista estándar de tm
-docs <- tm_map(docs, removeWords, stopwords("english"))
+docs3 <- tm_map(docs3, removeWords, stopwords("english"))
 
 # Borrar todos los espacios en blanco extraños
-docs <- tm_map(docs, stripWhitespace)
+docs3 <- tm_map(docs3, stripWhitespace)
 
 # Stemming
-docs <- tm_map(docs,stemDocument)
+docs3 <- tm_map(docs3,stemDocument)
 #writeLines(as.character(docs[[1]]))
 
 # Lemmatization (toma en cuenta el contexto) ... podrían hacerse varias más
-docs <- tm_map(docs, content_transformer(gsub), pattern = "organiz", replacement = "organ")
-docs <- tm_map(docs, content_transformer(gsub), pattern = "organis", replacement = "organ")
-docs <- tm_map(docs, content_transformer(gsub), pattern = "andgovern", replacement = "govern")
-docs <- tm_map(docs, content_transformer(gsub), pattern = "inenterpris", replacement = "enterpris")
-docs <- tm_map(docs, content_transformer(gsub), pattern = "team-", replacement = "team")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "organiz", replacement = "organ")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "organis", replacement = "organ")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "andgovern", replacement = "govern")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "inenterpris", replacement = "enterpris")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "team-", replacement = "team")
 
 #writeLines(as.character(docs[[1]]))
 
 # Matriz de documentos - términos (MDT)
-dtm <- DocumentTermMatrix(docs, control=list(wordLengths=c(4, 20)))
+dtm3 <- DocumentTermMatrix(docs3, control=list(wordLengths=c(4, 20)))
 # Matriz de 30 x 4200, en la cual un 89% de filas son cero
-dtm
+dtm3
 ```
 ```{r}
-freq <- colSums(as.matrix(dtm))
-ord <- order(freq,decreasing=TRUE)
+freq3 <- colSums(as.matrix(dtm3))
+ord3 <- order(freq3,decreasing=TRUE)
 print("Términos más frecuentes: ")
-print(freq[head(ord)])
+print(freq3[head(ord3)])
+```
+
+### 5) Terminos mas comunes en comentarios negativos y positivos
+De una manera analoga a la anterior, se cargan los comentarios positivos y negativos de todas las categorias
+```{r}
+positives <- categories_mongo$find('{}','{"cumulated_reviews.positives":1, "_id":0}')
+negatives <- categories_mongo$find('{}','{"cumulated_reviews.negatives":1, "_id":0}')
+
+vector_positive_reviews <- VectorSource(c(positives[,1]))
+vector_negative_reviews <- VectorSource(c(negatives[,1]))
+
+Pdocs <- VCorpus(vector_positive_reviews)
+Ndocs <- VCorpus(vector_negative_reviews)
+
+# Limpieza de puntuacion
+# Usar el transformador anterior para eliminar comas, dos puntos y otros...
+Pdocs <- tm_map(Pdocs, toSpace, "-")
+Pdocs <- tm_map(Pdocs, toSpace, ":")
+Pdocs <- tm_map(Pdocs, removePunctuation)
+Pdocs <- tm_map(Pdocs, toSpace, "’")
+Pdocs <- tm_map(Pdocs, toSpace, "‘")
+Pdocs <- tm_map(Pdocs, toSpace, " -")
+
+Ndocs <- tm_map(Ndocs, toSpace, "-")
+Ndocs <- tm_map(Ndocs, toSpace, ":")
+Ndocs <- tm_map(Ndocs, removePunctuation)
+Ndocs <- tm_map(Ndocs, toSpace, "’")
+Ndocs <- tm_map(Ndocs, toSpace, "‘")
+Ndocs <- tm_map(Ndocs, toSpace, " -")
+
+# There are some parasite words that need cleaning
+Pdocs <- tm_map(Pdocs, toSpace, "data frame")
+Pdocs <- tm_map(Pdocs, toSpace, "Translated_Review")
+Pdocs <- tm_map(Pdocs, toSpace, "datafram")
+
+Ndocs <- tm_map(Ndocs, toSpace, "data frame")
+Ndocs <- tm_map(Ndocs, toSpace, "Translated_Review")
+Ndocs <- tm_map(Ndocs, toSpace, "datafram")
+
+# Transformar todo a minusculas
+Pdocs <- tm_map(Pdocs,content_transformer(tolower))
+Ndocs <- tm_map(Ndocs,content_transformer(tolower))
+
+# Eliminar digitos
+Pdocs <- tm_map(Pdocs, removeNumbers)
+Ndocs <- tm_map(Ndocs, removeNumbers)
+
+# Remover stopwords usando la lista est?ndar de tm
+Pdocs <- tm_map(Pdocs, removeWords, stopwords("english"))
+Ndocs <- tm_map(Ndocs, removeWords, stopwords("english"))
+
+# Borrar todos los espacios en blanco extraños
+Pdocs <- tm_map(Pdocs, stripWhitespace)
+Ndocs <- tm_map(Ndocs, stripWhitespace)
+
+# Stemming
+Pdocs <- tm_map(Pdocs,stemDocument)
+Ndocs <- tm_map(Ndocs,stemDocument)
+
+# Lemmatization (toma en cuenta el contexto) ... podr?an hacerse varias m?s
+Pdocs <- tm_map(Pdocs, content_transformer(gsub), pattern = "organiz", replacement = "organ")
+Pdocs <- tm_map(Pdocs, content_transformer(gsub), pattern = "organis", replacement = "organ")
+Pdocs <- tm_map(Pdocs, content_transformer(gsub), pattern = "andgovern", replacement = "govern")
+Pdocs <- tm_map(Pdocs, content_transformer(gsub), pattern = "inenterpris", replacement = "enterpris")
+Pdocs <- tm_map(Pdocs, content_transformer(gsub), pattern = "team-", replacement = "team")
+
+Ndocs <- tm_map(Ndocs, content_transformer(gsub), pattern = "organiz", replacement = "organ")
+Ndocs <- tm_map(Ndocs, content_transformer(gsub), pattern = "organis", replacement = "organ")
+Ndocs <- tm_map(Ndocs, content_transformer(gsub), pattern = "andgovern", replacement = "govern")
+Ndocs <- tm_map(Ndocs, content_transformer(gsub), pattern = "inenterpris", replacement = "enterpris")
+Ndocs <- tm_map(Ndocs, content_transformer(gsub), pattern = "team-", replacement = "team")
+
+# Matriz de documentos - t?rminos (MDT)
+Pdtm <- DocumentTermMatrix(Pdocs, control=list(wordLengths=c(4, 20)))
+Ndtm <- DocumentTermMatrix(Ndocs, control=list(wordLengths=c(4, 20)))
+# Matriz de 30 x 4200, en la cual un 89% de filas son cero
+Pdtm
+Ndtm
+```
+
+Los terminos de mayor Frecuencia de los terminos positivos estan dados por:
+```{r}
+freqp <- colSums(as.matrix(Pdtm))
+ordn <- order(freqp,decreasing=TRUE)
+print(freqp[head(ordn)])
+```
+
+Y los terminos de mayor Frecuencia de los terminos negativos estan dados por:
+```{r}
+freqn <- colSums(as.matrix(Ndtm))
+ordn <- order(freqn,decreasing=TRUE)
+print(freqn[head(ordn)])
+```
+
+
+### 6) Nube de palabras con N términos más comunes
+
+Se decidió usar un N = 50 para los términos más comunes, los que serán obtenidos del primer análisis de frecuencias.
+
+```{r}
+# Setear un valor semilla
+set.seed(42)
+# Nube de palabras en blanco y negro; palabras con frecuencia mínima de 1000
+wordcloud(names(freq), freq, min.freq=1000, max.words= 60, colors=brewer.pal(6,"Dark2"))
+```
+
+```{r}
+dtmr2 <- removeSparseTerms(dtm, sparse = 0.15)
+inspect(dtmr2)
+```
+```{r}
+distMatrix <- dist(t(dtmr2), method= "manhattan")# probar con otros métodos
+
+nroClusters <- 3
+
+kfit <- kmeans(distMatrix, nroClusters)
+
+clusplot(as.matrix(distMatrix), kfit$cluster, color=T, shade=T, labels=2, lines=0)
+# Para chequear palabras representativas dentro de cada cluster 
+for (i in 1: nroClusters)
+{
+  cat(paste("cluster ", i, ": ", sep = ""))
+  s <- sort(kfit$centers[i,], decreasing = T)
+  cat(names(s)[1:5], "\n")
+}
 ```
 
