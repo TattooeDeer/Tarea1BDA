@@ -153,7 +153,7 @@ Se puede observar la frecuencia de términos en el documento, la cual como es de
 
 ### 3) Relaciones entre términos descriptivos
 
-A continuación se presenta el gráfico de relación entre términos presented en los documentos.
+A continuación se presenta el gráfico de relación entre términos presentes en los documentos.
 ```{r}
 freq.terms <- findFreqTerms(dtm,lowfreq=4500)
 plot(dtm, term = freq.terms, corThreshold = 0.12, weighting = T)
