@@ -1,11 +1,13 @@
 ---
 title: "Críticas de Apps en Google Play Store"
-output: pdf_document
 author:
 - Ignacio Loayza.
 - Miguel Huichaman.
 - Jorge Caullán.
-date: 15/04/2019
+date: "15/04/2019"
+output:
+  html_document:
+    df_print: paged
 ---
 
 En esta ocasión se estudiaran las críticas a varias aplicaciones de la Google Play Store.
@@ -13,7 +15,7 @@ El código para importar los datos a la base de datos, asi como también el esqu
 
 ```{r}
 # Paquetes requeridos
-list.of.packages <- c("SnowballC", "tm", "mongolite", "wordcloud", "RColorBrewer", "fpc")
+list.of.packages <- c("SnowballC", "tm", "mongolite", "wordcloud", "RColorBrewer", "fpc", "cluster")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -24,6 +26,7 @@ library("mongolite")
 library("wordcloud")
 library("RColorBrewer")
 library("fpc")
+library("cluster")
 
 
 if (!requireNamespace("BiocManager", quietly = TRUE))
@@ -486,17 +489,21 @@ wordcloud(names(freq), freq, min.freq=1000, max.words= 60, colors=brewer.pal(6,"
 Podemos ver claramente que los términos representativos que hemos encontrado en el análisis de sentimientos están presentes con mayor tamaño en la nube de palabras, los tèrminos con menor tamaño ortorgan poca información por si solos por lo que quizás son relevantes en un determinado contexto.
 
 ```{r}
-dtmr2 <- removeSparseTerms(dtm, sparse = 0.15)
+dtmr2 <- removeSparseTerms(dtm, sparse = 0.05)
 inspect(dtmr2)
-```
-```{r}
+
 distMatrix <- dist(t(dtmr2), method= "manhattan")# probar con otros métodos
 
-nroClusters <- 3
+nroClusters <- 5 # as many as categories
 
-kfit <- kmeans(distMatrix, nroClusters)
+kmeans_fit <- kmeans(distMatrix, nroClusters)
+hclust_fit <- hclust(distMatrix, method = "ward")
 
-clusplot(as.matrix(distMatrix), kfit$cluster, color=T, shade=T, labels=2, lines=0)
+clusplot(as.matrix(distMatrix), kmeans_fit$cluster, color=T, shade=T, labels=1, lines=0, main = "5-Means Clustering")
+clusplot(as.matrix(distMatrix), kmeans_fit$cluster, color=T, shade=T, labels=2, lines=0, main = "5-Means Clustering")
+# Dendrograma
+plot(hclust_fit, cex=0.2, hang=-1, main = "Dendrograma de Clusters de Palabras")
+#clusplot(as.matrix(distMatrix), k_fitfit$cluster, color=T, shade=T, labels=3, lines=0, main = "Cluster jerárquico")
 # Para chequear palabras representativas dentro de cada cluster 
 for (i in 1: nroClusters)
 {
@@ -505,4 +512,6 @@ for (i in 1: nroClusters)
   cat(names(s)[1:5], "\n")
 }
 ```
+Se puede ver que en el caso de clustering particional (KMeans) la mayoría de los clusters se concentran en la zona de alta densidad de la esquina inferior, mientras que un cluster centrado en un único término `game` nos muestra claramente que este término tiene características distintas a los demás, como se vio en el análisis de repetición de términos, `game` es un ´termino que se repite mucho tanto en sentimientos positivos como negativos.
 
+Con respecto a clustering jerárquico, cortando al segundo nivel se puede extraer tres clusters.
