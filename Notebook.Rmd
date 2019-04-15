@@ -6,6 +6,7 @@ author:
 - Jorge Caullán.
 date: "15/04/2019"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 ---
@@ -494,13 +495,13 @@ inspect(dtmr2)
 
 distMatrix <- dist(t(dtmr2), method= "manhattan")# probar con otros métodos
 
-nroClusters <- 5 # as many as categories
+nroClusters <- 3 # as many as categories
 
 kmeans_fit <- kmeans(distMatrix, nroClusters)
-hclust_fit <- hclust(distMatrix, method = "ward")
+hclust_fit <- hclust(distMatrix, method = "average")
 
-clusplot(as.matrix(distMatrix), kmeans_fit$cluster, color=T, shade=T, labels=1, lines=0, main = "5-Means Clustering")
-clusplot(as.matrix(distMatrix), kmeans_fit$cluster, color=T, shade=T, labels=2, lines=0, main = "5-Means Clustering")
+clusplot(as.matrix(distMatrix), kmeans_fit$cluster, color=T, shade=T, labels=1, lines=0, main = "3-Means Clustering")
+clusplot(as.matrix(distMatrix), kmeans_fit$cluster, color=T, shade=T, labels=2, lines=0, main = "3-Means Clustering")
 # Dendrograma
 plot(hclust_fit, cex=0.2, hang=-1, main = "Dendrograma de Clusters de Palabras")
 #clusplot(as.matrix(distMatrix), k_fitfit$cluster, color=T, shade=T, labels=3, lines=0, main = "Cluster jerárquico")
@@ -508,10 +509,10 @@ plot(hclust_fit, cex=0.2, hang=-1, main = "Dendrograma de Clusters de Palabras")
 for (i in 1: nroClusters)
 {
   cat(paste("cluster ", i, ": ", sep = ""))
-  s <- sort(kfit$centers[i,], decreasing = T)
+  s <- sort(kmeans_fit$centers[i,], decreasing = T)
   cat(names(s)[1:5], "\n")
 }
 ```
 Se puede ver que en el caso de clustering particional (KMeans) la mayoría de los clusters se concentran en la zona de alta densidad de la esquina inferior, mientras que un cluster centrado en un único término `game` nos muestra claramente que este término tiene características distintas a los demás, como se vio en el análisis de repetición de términos, `game` es un ´termino que se repite mucho tanto en sentimientos positivos como negativos.
 
-Con respecto a clustering jerárquico, cortando al segundo nivel se puede extraer tres clusters.
+Con respecto a clustering jerárquico, cortando al tercer nivel se puede extraer dos o tres clusters que parecen mostrar que un gran grupo de términos pueden ser aglomerados juntos y solo un pequeño conjunto está alejado del resto. Se utilizó la distancia media para calcular las aglomeraciones.
