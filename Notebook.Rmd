@@ -25,11 +25,13 @@ library("wordcloud")
 library("RColorBrewer")
 library("fpc")
 
+
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install()
 BiocManager::install("graph", version = "3.8")
 BiocManager::install("Rgraphviz", version = "3.8")
+library("Rgraphviz")
 
 categories_mongo <- mongo(collection = "categories", db = "tarea1BDA", url = 'mongodb://127.0.0.1:27017')
 categories <- categories_mongo$find('{}','{"category":1, "_id":0}') # Con esto tendremos una lista con todas las categorias que hay
@@ -65,7 +67,7 @@ sd(newdata$mean_rating)
 
 
 ## 2.- Términos descriptivos a los que más se hace alusión
-Ahora, se estudiarán los términos que más se repiten en las reviews de las apps, sin embargo, en este análisis se estudiará esta dimensión en dos casos interesantes: Primero, se estudiará la repetición de términos considerando todas las reviews disponibles y luego, se analizarán los términos más repetitivos por sentimiento, de esta forma se espera encontrar aquellos términos que representan de mejor manera los reviews positivos, negativos y neutrales.
+Ahora, se estudiará la repetición de términos considerando todas las reviews disponibles.
 
 Primero almacenaremos los textos de todas las reviews en formato .txt, separadas inmediatamente por sentimiento, para poder conformar de manera formal el corpus:
 ```{r}
@@ -79,7 +81,6 @@ rev_all <- c(positive[,1],negative[,1],neutral[,1])
 vector_reviews <- VectorSource(rev_all)
 
 ```
-### 1.1) Términos más repetitivos en todas las apps registradas
 Cargamos el corpus leyendo los textos de todas las reviews.
 
 ```{r}
@@ -151,32 +152,34 @@ plot(freq[ord], main = "Frecuencia de términos en los documentos", ylab="Frecue
 Se puede observar la frecuencia de términos en el documento, la cual como es de esperarse, se manifiesta de acuerdo a la Ley de Zipf: Algunos pocos términos son exponencialmente más frecuentes que los demás del documento.
 
 
-### 3) Relaciones entre términos descriptivos
+## 3) Relaciones entre términos descriptivos
 
 A continuación se presenta el gráfico de relación entre términos presentes en los documentos.
 ```{r}
-freq.terms <- findFreqTerms(dtm,lowfreq=4500)
-plot(dtm, term = freq.terms, corThreshold = 0.12, weighting = T)
+freq.terms <- findFreqTerms(dtm,lowfreq=4700)
+plot(dtm, term = freq.terms, corThreshold = 0.90, weighting = T)
 ```
+Se puede observar que los términos comunes estan fuertemente relacionados (correlation threshold = $0.90$) en cuanto a ocurrencia conjunta en los reviews pues todas las aristas se muestran en negrita. Se puede ver que la palabra `game` solo esta fuertemente relacionada con `time`, probablemente debido a los reviews que comentan sobre el tiempo de juego. También se puede notar que existe una clique entre todos los términos, exceptuado `game`, y dichos términos son casi en su totalidad asociados a sentimientos positivos, luego, el conjunto de términos con mayor repetición en los reviews estan casi todos asociados a sentimientos positivos y tienen una ocurrencia altamente correlacionada.
 
 
-
-### 4) Términos más repetitivos 3 categorías diferentes
+## 4) Términos más repetitivos 3 categorías diferentes
 
 Cargamos el corpus leyendo los textos de todas las reviews de las categorías ART_AND_DESIGN, EDUCATION, FINANCE.
 
-```{r}
-positives <- categories_mongo$find('{"category": { "$in": ["ART_AND_DESIGN", "EDUCATION", "FINANCE" ]}}','{"cumulated_reviews.positives":1, "_id":0}')
-negatives <- categories_mongo$find('{"category": { "$in": ["ART_AND_DESIGN", "EDUCATION", "FINANCE" ]}}','{"cumulated_reviews.negatives":1, "_id":0}')
-neutrals <- categories_mongo$find('{"category": { "$in": ["ART_AND_DESIGN", "EDUCATION", "FINANCE" ]}}','{"cumulated_reviews.neutrals":1, "_id":0}')
+### 4.1) Categoria _Art and Design_
 
-rev_3 <- c(positives[,1],negatives[,1],neutrals[,1])
-vector_3_reviews <- VectorSource(rev_3)
+```{r}
+positives_art <- categories_mongo$find('{"category": "ART_AND_DESIGN"}','{"cumulated_reviews.positives":1, "_id":0}')
+negatives_art <- categories_mongo$find('{"category": "ART_AND_DESIGN"}','{"cumulated_reviews.negatives":1, "_id":0}')
+neutrals_art <- categories_mongo$find('{"category": "ART_AND_DESIGN"}','{"cumulated_reviews.neutrals":1, "_id":0}')
+
+rev_3_art <- c(positives_art[,1],negatives_art[,1],neutrals_art[,1])
+vector_3_art_reviews <- VectorSource(rev_3_art)
 ```
 Cargamos el corpus leyendo los textos de todas las reviews de estas categorías.
 ```{r}
 
-docs3 <- VCorpus(vector_3_reviews)
+docs3 <- VCorpus(vector_3_art_reviews)
 
 # Transformador de espacios
 toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
@@ -228,11 +231,152 @@ dtm3
 ```{r}
 freq3 <- colSums(as.matrix(dtm3))
 ord3 <- order(freq3,decreasing=TRUE)
-print("Términos más frecuentes: ")
+print("Términos más frecuentes para la categoría `Art and Design`: ")
+print(freq3[head(ord3)])
+```
+Se puede ver que los términos más comunes para la cetagoría de arte y diseño son principalemente términos asociados a sentimientos positivos, con la excepción de los términos `make`, `color` y `picture`, además, el término más repetido es `color`, el cual tiene bastante relación con la categoría en sí por lo que es esperable.
+
+### 4.2) Categoría _Education_:
+```{r}
+positives_edu <- categories_mongo$find('{"category": "EDUCATION"}','{"cumulated_reviews.positives":1, "_id":0}')
+negatives_edu <- categories_mongo$find('{"category": "EDUCATION"}','{"cumulated_reviews.negatives":1, "_id":0}')
+neutrals_edu <- categories_mongo$find('{"category": "EDUCATION"}','{"cumulated_reviews.neutrals":1, "_id":0}')
+
+rev_3_edu <- c(positives_edu[,1],negatives_edu[,1],neutrals_edu[,1])
+vector_3_edu_reviews <- VectorSource(rev_3_edu)
+
+
+docs3 <- VCorpus(vector_3_edu_reviews)
+
+# Transformador de espacios
+toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
+
+# Limpieza de puntuacion
+# Usar el transformador anterior para eliminar comas, dos puntos y otros...
+docs3 <- tm_map(docs3, toSpace, "-")
+docs3 <- tm_map(docs3, toSpace, ":")
+docs3 <- tm_map(docs3, removePunctuation)
+docs3 <- tm_map(docs3, toSpace, "’")
+docs3 <- tm_map(docs3, toSpace, "‘")
+docs3 <- tm_map(docs3, toSpace, " -")
+
+# There are some parasite words that need cleaning
+docs3 <- tm_map(docs3, toSpace, "data frame")
+docs3 <- tm_map(docs3, toSpace, "Translated_Review")
+docs3 <- tm_map(docs3, toSpace, "datafram")
+
+# Transformar todo a minusculas
+docs3 <- tm_map(docs3,content_transformer(tolower))
+
+# Eliminar digitos
+docs3 <- tm_map(docs3, removeNumbers)
+
+# Remover stopwords usando la lista estándar de tm
+docs3 <- tm_map(docs3, removeWords, stopwords("english"))
+
+# Borrar todos los espacios en blanco extraños
+docs3 <- tm_map(docs3, stripWhitespace)
+
+# Stemming
+docs3 <- tm_map(docs3,stemDocument)
+#writeLines(as.character(docs[[1]]))
+
+# Lemmatization (toma en cuenta el contexto) ... podrían hacerse varias más
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "organiz", replacement = "organ")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "organis", replacement = "organ")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "andgovern", replacement = "govern")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "inenterpris", replacement = "enterpris")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "team-", replacement = "team")
+
+#writeLines(as.character(docs[[1]]))
+
+# Matriz de documentos - términos (MDT)
+dtm3 <- DocumentTermMatrix(docs3, control=list(wordLengths=c(4, 20)))
+# Matriz de 30 x 4200, en la cual un 89% de filas son cero
+dtm3
+```
+```{r}
+freq3 <- colSums(as.matrix(dtm3))
+ord3 <- order(freq3,decreasing=TRUE)
+print("Términos más frecuentes para la categoría `Education`: ")
 print(freq3[head(ord3)])
 ```
 
-### 5) Terminos mas comunes en comentarios negativos y positivos
+Se puede observar que el término más común es `learn` el cual tiene directa relación con la categoría, además, se puede ver nuevamente que hay términos asociados con sentimientos positivos como `great` y `good`, si embargo, en menor cantidad que para la categoría anterior. El término `help` es interesante pues puede tener relación con algún aspecto positivo que se esté tratando de explicar en una review, por ejemplo, "This app helped me to ...".
+
+### 4.3) Categoría _Finance_:
+
+```{r}
+positives_fin <- categories_mongo$find('{"category": "FINANCE"}','{"cumulated_reviews.positives":1, "_id":0}')
+negatives_fin <- categories_mongo$find('{"category": "FINANCE"}','{"cumulated_reviews.negatives":1, "_id":0}')
+neutrals_fin <- categories_mongo$find('{"category": "FINANCE"}','{"cumulated_reviews.neutrals":1, "_id":0}')
+
+rev_3_fin <- c(positives_fin[,1],negatives_fin[,1],neutrals_fin[,1])
+vector_3_fin_reviews <- VectorSource(rev_3_fin)
+
+
+docs3 <- VCorpus(vector_3_fin_reviews)
+
+# Transformador de espacios
+toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
+
+# Limpieza de puntuacion
+# Usar el transformador anterior para eliminar comas, dos puntos y otros...
+docs3 <- tm_map(docs3, toSpace, "-")
+docs3 <- tm_map(docs3, toSpace, ":")
+docs3 <- tm_map(docs3, removePunctuation)
+docs3 <- tm_map(docs3, toSpace, "’")
+docs3 <- tm_map(docs3, toSpace, "‘")
+docs3 <- tm_map(docs3, toSpace, " -")
+
+# There are some parasite words that need cleaning
+docs3 <- tm_map(docs3, toSpace, "data frame")
+docs3 <- tm_map(docs3, toSpace, "Translated_Review")
+docs3 <- tm_map(docs3, toSpace, "datafram")
+
+# Transformar todo a minusculas
+docs3 <- tm_map(docs3,content_transformer(tolower))
+
+# Eliminar digitos
+docs3 <- tm_map(docs3, removeNumbers)
+
+# Remover stopwords usando la lista estándar de tm
+docs3 <- tm_map(docs3, removeWords, stopwords("english"))
+
+# Borrar todos los espacios en blanco extraños
+docs3 <- tm_map(docs3, stripWhitespace)
+
+# Stemming
+docs3 <- tm_map(docs3,stemDocument)
+#writeLines(as.character(docs[[1]]))
+
+# Lemmatization (toma en cuenta el contexto) ... podrían hacerse varias más
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "organiz", replacement = "organ")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "organis", replacement = "organ")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "andgovern", replacement = "govern")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "inenterpris", replacement = "enterpris")
+docs3 <- tm_map(docs3, content_transformer(gsub), pattern = "team-", replacement = "team")
+
+#writeLines(as.character(docs[[1]]))
+
+# Matriz de documentos - términos (MDT)
+dtm3 <- DocumentTermMatrix(docs3, control=list(wordLengths=c(4, 20)))
+# Matriz de 30 x 4200, en la cual un 89% de filas son cero
+dtm3
+```
+
+```{r}
+freq3 <- colSums(as.matrix(dtm3))
+ord3 <- order(freq3,decreasing=TRUE)
+print("Términos más frecuentes para la categoría `Finance`: ")
+print(freq3[head(ord3)])
+```
+
+
+En el caso de la categoría _`Finanzas`_ no hay términos asociados a ningún sentimiento en particular, en lugar de eso, parece ser que los términos más populares son utilizaos en descripciónes utilitarias de las apps y características de las mismas. El término más común es `work` y tiene bastante sentido considerando que probablemente la mayoría de estas aplicaciones estan pensadas para asistir a las personas en el trabajo.
+
+
+## 5) Terminos mas comunes en comentarios negativos y positivos
 De una manera analoga a la anterior, se cargan los comentarios positivos y negativos de todas las categorias
 ```{r}
 positives <- categories_mongo$find('{}','{"cumulated_reviews.positives":1, "_id":0}')
@@ -316,6 +460,8 @@ freqp <- colSums(as.matrix(Pdtm))
 ordn <- order(freqp,decreasing=TRUE)
 print(freqp[head(ordn)])
 ```
+El término más común en el caso de los comentarios positivos es `game`, lo que nos indica que al parecer la mayoría de las reviews positivas se pueden encontrar en aplicaciones de juegos. Por otro lado, están varios términos ya vistos que hacen relación con la emocionalidad positiva del review. Finalmente, se puede ver que `time` esta asociado con reviews de sentimiento positivo.
+
 
 Y los terminos de mayor Frecuencia de los terminos negativos estan dados por:
 ```{r}
@@ -323,9 +469,11 @@ freqn <- colSums(as.matrix(Ndtm))
 ordn <- order(freqn,decreasing=TRUE)
 print(freqn[head(ordn)])
 ```
+En el caso de los reviews de sentimiento negativo se puede observar que curiosamente, al igual que en aquellos de sentimiento positivo, el término más común es `game`, esto nos hace contraste con la conclusión anterior puesto que gran parte de los reviews negativos hacen alusión a juegos también, concluimos entonces que los juegos son un tipo de aplicación con reviews bastante dispersos y extremos. Otro términos encontrado: `play`, también hacen alusión a juegos.
 
+El resto de los términos curiosamente no expresan sentimientos negativos, probablemente tengan una connotación negativa en conjunto con otros términos de la misma oración.
 
-### 6) Nube de palabras con N términos más comunes
+## 6) Nube de palabras con N términos más comunes
 
 Se decidió usar un N = 50 para los términos más comunes, los que serán obtenidos del primer análisis de frecuencias.
 
@@ -335,6 +483,7 @@ set.seed(42)
 # Nube de palabras en blanco y negro; palabras con frecuencia mínima de 1000
 wordcloud(names(freq), freq, min.freq=1000, max.words= 60, colors=brewer.pal(6,"Dark2"))
 ```
+Podemos ver claramente que los términos representativos que hemos encontrado en el análisis de sentimientos están presentes con mayor tamaño en la nube de palabras, los tèrminos con menor tamaño ortorgan poca información por si solos por lo que quizás son relevantes en un determinado contexto.
 
 ```{r}
 dtmr2 <- removeSparseTerms(dtm, sparse = 0.15)
